@@ -262,4 +262,4 @@ if uploaded_file:
 
 else:
     st.info("Upload a PDF to begin document analysis.")
-bro see this is the code oi deployed the app but there is a problem when i ask question it isgiving 1.1.1.1.1 and the ss error
+
