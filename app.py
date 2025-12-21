@@ -13,13 +13,12 @@ from reranker.cross_encoder import CrossEncoderReranker
 
 
 # =========================================================
-# HELPER: KEYWORD OVERLAP GATE (ANTI-SEMANTIC DRIFT)
+# HELPER: KEYWORD OVERLAP (ANTI SEMANTIC-DRIFT)
 # =========================================================
 def keyword_overlap(question, retrieved_chunks, min_overlap=1):
     question_keywords = set(
         re.findall(r"\b[a-zA-Z]{3,}\b", question.lower())
     )
-
     if not question_keywords:
         return False
 
@@ -35,52 +34,88 @@ def keyword_overlap(question, retrieved_chunks, min_overlap=1):
 # 1. PAGE CONFIG
 # =========================================================
 st.set_page_config(
-    page_title="Document Intelligence",
+    page_title="Document Intelligence System",
     page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # =========================================================
-# 2. UI STYLES
+# 2. GLASSMORPHISM UI
 # =========================================================
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
 html, body, [class*="css"] {
-    font-family: Inter, sans-serif;
+    font-family: 'Inter', sans-serif;
     color: #EDEDED;
 }
+
 .stApp {
-    background: radial-gradient(circle at 15% 50%, rgba(0,180,216,0.1), #0A0A0C 60%),
-                radial-gradient(circle at 85% 30%, rgba(100,50,255,0.08), #0A0A0C 60%);
+    background: radial-gradient(circle at 15% 50%, rgba(0,180,216,0.12), #0A0A0C 60%),
+                radial-gradient(circle at 85% 30%, rgba(100,50,255,0.10), #0A0A0C 60%);
+    background-attachment: fixed;
 }
+
+.hero {
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 18px;
+    padding: 32px;
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.hero-title {
+    font-size: 2.6rem;
+    font-weight: 700;
+    background: linear-gradient(90deg, #ffffff, #00B4D8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.hero-sub {
+    color: #B0B0B0;
+    font-size: 1.05rem;
+}
+
 .answer-box {
-    background: rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.06);
     border-left: 4px solid #00B4D8;
-    padding: 16px;
-    border-radius: 12px;
+    padding: 18px;
+    border-radius: 14px;
+    margin-top: 10px;
 }
+
 .confidence {
     font-size: 0.85rem;
     color: #00B4D8;
+    margin-top: 6px;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# 3. HEADER
+# 3. HERO HEADER
 # =========================================================
 st.markdown("""
-## 📄 Document Intelligence System  
-*Strict document-grounded question answering (RAG)*
-""")
+<div class="hero">
+    <div class="hero-title">Document Intelligence System</div>
+    <div class="hero-sub">
+        Document-grounded Question Answering using RAG  
+        <br/>No hallucination • Evidence-backed • Explainable
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # =========================================================
 # 4. INIT LLM
 # =========================================================
 api_key = os.getenv("GROQ_API_KEY")
 if not api_key:
-    st.error("GROQ_API_KEY not set.")
+    st.error("❌ GROQ_API_KEY not set.")
     st.stop()
 
 generator = AnswerGenerator(api_key)
@@ -97,12 +132,20 @@ for key in ["vector_store", "embedder", "reranker", "processed_file", "messages"
 # =========================================================
 with st.sidebar:
     st.markdown("### 📄 Document Intelligence")
-    st.caption("Document-grounded RAG • No hallucination")
+    st.caption("Strict document-grounded RAG")
+    st.markdown("---")
+    st.caption(
+        "• Upload a PDF\n"
+        "• Ask document-related questions\n"
+        "• Answers come only from the document\n"
+        "• Unsupported queries are rejected\n"
+        "• Evidence & confidence shown"
+    )
 
 # =========================================================
 # 7. FILE UPLOAD
 # =========================================================
-uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
+uploaded_file = st.file_uploader("📤 Upload a PDF to initialize analysis", type=["pdf"])
 
 if uploaded_file:
     if st.session_state.processed_file != uploaded_file.name:
@@ -119,11 +162,12 @@ if uploaded_file:
                 all_chunks.append(c)
                 sources.append(doc["source"])
 
-        embedder = TextEmbedder()
-        embeddings = embedder.embed_texts(all_chunks)
+        with st.spinner("Building document index..."):
+            embedder = TextEmbedder()
+            embeddings = embedder.embed_texts(all_chunks)
 
-        vector_store = FaissVectorStore(embeddings.shape[1])
-        vector_store.add(embeddings, all_chunks, sources)
+            vector_store = FaissVectorStore(embeddings.shape[1])
+            vector_store.add(embeddings, all_chunks, sources)
 
         st.session_state.embedder = embedder
         st.session_state.vector_store = vector_store
@@ -137,13 +181,14 @@ if uploaded_file:
     # =====================================================
     # 8. CHAT
     # =====================================================
+    st.markdown("### 💬 Ask Questions")
+
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
     if question := st.chat_input("Ask a question about the document"):
 
-        # 🚫 Block meaningless input
         if len(question.strip()) < 4:
             st.warning("Please ask a meaningful document-related question.")
             st.stop()
@@ -172,7 +217,7 @@ if uploaded_file:
                 keyword_ok = keyword_overlap(question, reranked_results)
 
                 # =================================================
-                # 🔒 FINAL HARD GATE (ALL MUST PASS)
+                # 🔒 FINAL HARD GATE (NO EXCEPTIONS)
                 # =================================================
                 if (
                     not reranked_results
@@ -197,17 +242,17 @@ if uploaded_file:
                 )
 
                 if evidence:
-                    with st.expander("🧾 Evidence from Document"):
+                    with st.expander("🧾 Supporting Evidence from Document"):
                         for e in evidence:
                             st.markdown(f"- {e}")
 
                 if citations:
-                    with st.expander("📚 Source"):
+                    with st.expander("📚 Source Citations"):
                         for c in citations:
                             st.markdown(f"- {c}")
 
                 st.markdown(
-                    f"<div class='confidence'>Confidence Score: {avg_conf:.2f}</div>",
+                    f"<div class='confidence'>📊 Confidence Score: {avg_conf:.2f}</div>",
                     unsafe_allow_html=True
                 )
 
@@ -216,4 +261,5 @@ if uploaded_file:
         )
 
 else:
-    st.info("Upload a PDF to begin.")
+    st.info("Upload a PDF to begin document analysis.")
+bro see this is the code oi deployed the app but there is a problem when i ask question it isgiving 1.1.1.1.1 and the ss error
