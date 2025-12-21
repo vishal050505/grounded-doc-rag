@@ -131,16 +131,38 @@ for key in ["vector_store", "embedder", "reranker", "processed_file", "messages"
 # 6. SIDEBAR
 # =========================================================
 with st.sidebar:
-    st.markdown("### 📄 Document Intelligence")
-    st.caption("Strict document-grounded RAG")
-    st.markdown("---")
-    st.caption(
-        "• Upload a PDF\n"
-        "• Ask document-related questions\n"
-        "• Answers come only from the document\n"
-        "• Unsupported queries are rejected\n"
-        "• Evidence & confidence shown"
+    st.markdown(
+        """
+        <div style="margin-bottom: 10px;">
+            <h3 style="color: #FFFFFF; margin-bottom: 2px;">
+                📄 Document Intelligence
+            </h3>
+            <span style="color: #9AA0A6; font-size: 0.8rem;">
+                Strict document-grounded RAG
+            </span>
+        </div>
+
+        <hr style="border: 0.5px solid rgba(255,255,255,0.12); margin: 10px 0;">
+
+        <h4 style="color: #FFFFFF; margin-bottom: 6px;">
+            Instructions
+        </h4>
+
+        <div style="
+            color: #B0B0B0;
+            font-size: 0.8rem;
+            line-height: 1.45;
+        ">
+            Upload a PDF<br>
+            Ask document-specific questions<br>
+            Answers are generated only from the document<br>
+            Unsupported queries are rejected<br>
+            Evidence and confidence are shown
+        </div>
+        """,
+        unsafe_allow_html=True
     )
+
 
 # =========================================================
 # 7. FILE UPLOAD
@@ -262,4 +284,5 @@ if uploaded_file:
 
 else:
     st.info("Upload a PDF to begin document analysis.")
+
 
