@@ -1,6 +1,7 @@
 import streamlit as st
 import tempfile
 import os
+import re
 
 from ingestion.loader import load_documents
 from chunking.chunker import chunk_text
@@ -9,6 +10,25 @@ from vector_store.faiss_index import FaissVectorStore
 from generation.answer_generator import AnswerGenerator
 from utils.confidence import compute_confidence
 from reranker.cross_encoder import CrossEncoderReranker
+
+
+# =========================================================
+# HELPER: KEYWORD OVERLAP GATE (ANTI-SEMANTIC DRIFT)
+# =========================================================
+def keyword_overlap(question, retrieved_chunks, min_overlap=1):
+    question_keywords = set(
+        re.findall(r"\b[a-zA-Z]{3,}\b", question.lower())
+    )
+
+    if not question_keywords:
+        return False
+
+    combined_text = " ".join(
+        chunk["text"].lower() for chunk in retrieved_chunks
+    )
+
+    overlap = [kw for kw in question_keywords if kw in combined_text]
+    return len(overlap) >= min_overlap
 
 
 # =========================================================
@@ -26,45 +46,20 @@ st.set_page_config(
 # =========================================================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
-
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: Inter, sans-serif;
     color: #EDEDED;
 }
-
 .stApp {
     background: radial-gradient(circle at 15% 50%, rgba(0,180,216,0.1), #0A0A0C 60%),
                 radial-gradient(circle at 85% 30%, rgba(100,50,255,0.08), #0A0A0C 60%);
-    background-attachment: fixed;
 }
-
-.hero {
-    background: rgba(255,255,255,0.05);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 16px;
-    padding: 30px;
-    text-align: center;
-    margin-bottom: 30px;
-}
-
-.hero-title {
-    font-size: 2.4rem;
-    font-weight: 700;
-}
-
-.hero-sub {
-    color: #A0A0A0;
-}
-
 .answer-box {
     background: rgba(255,255,255,0.05);
     border-left: 4px solid #00B4D8;
     padding: 16px;
     border-radius: 12px;
 }
-
 .confidence {
     font-size: 0.85rem;
     color: #00B4D8;
@@ -76,13 +71,9 @@ html, body, [class*="css"] {
 # 3. HEADER
 # =========================================================
 st.markdown("""
-<div class="hero">
-    <div class="hero-title">Document Intelligence System</div>
-    <div class="hero-sub">
-        Strict document-grounded question answering using RAG
-    </div>
-</div>
-""", unsafe_allow_html=True)
+## 📄 Document Intelligence System  
+*Strict document-grounded question answering (RAG)*
+""")
 
 # =========================================================
 # 4. INIT LLM
@@ -105,7 +96,7 @@ for key in ["vector_store", "embedder", "reranker", "processed_file", "messages"
 # 6. SIDEBAR
 # =========================================================
 with st.sidebar:
-    st.markdown("### 📄 Document Intelligence System")
+    st.markdown("### 📄 Document Intelligence")
     st.caption("Document-grounded RAG • No hallucination")
 
 # =========================================================
@@ -115,6 +106,7 @@ uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
 if uploaded_file:
     if st.session_state.processed_file != uploaded_file.name:
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             tmp.write(uploaded_file.read())
             pdf_path = tmp.name
@@ -135,8 +127,8 @@ if uploaded_file:
 
         st.session_state.embedder = embedder
         st.session_state.vector_store = vector_store
-        st.session_state.processed_file = uploaded_file.name
         st.session_state.reranker = CrossEncoderReranker()
+        st.session_state.processed_file = uploaded_file.name
 
         os.remove(pdf_path)
 
@@ -151,12 +143,14 @@ if uploaded_file:
 
     if question := st.chat_input("Ask a question about the document"):
 
-        # 🚫 Block garbage / nonsense input
+        # 🚫 Block meaningless input
         if len(question.strip()) < 4:
             st.warning("Please ask a meaningful document-related question.")
             st.stop()
 
-        st.session_state.messages.append({"role": "user", "content": question})
+        st.session_state.messages.append(
+            {"role": "user", "content": question}
+        )
 
         with st.chat_message("assistant"):
             with st.spinner("Analyzing document…"):
@@ -175,13 +169,16 @@ if uploaded_file:
                 avg_conf = confidence["average"]
                 max_conf = confidence["max"]
 
+                keyword_ok = keyword_overlap(question, reranked_results)
+
                 # =================================================
-                # 🔒 FINAL HARD GATE (NO EXCEPTIONS)
+                # 🔒 FINAL HARD GATE (ALL MUST PASS)
                 # =================================================
                 if (
                     not reranked_results
                     or max_conf < 0.45
                     or avg_conf < 0.30
+                    or not keyword_ok
                 ):
                     answer = (
                         "The uploaded document does not contain information "
@@ -194,7 +191,10 @@ if uploaded_file:
                         question, reranked_results
                     )
 
-                st.markdown(f"<div class='answer-box'>{answer}</div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div class='answer-box'>{answer}</div>",
+                    unsafe_allow_html=True
+                )
 
                 if evidence:
                     with st.expander("🧾 Evidence from Document"):
@@ -211,7 +211,9 @@ if uploaded_file:
                     unsafe_allow_html=True
                 )
 
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+        st.session_state.messages.append(
+            {"role": "assistant", "content": answer}
+        )
 
 else:
     st.info("Upload a PDF to begin.")
