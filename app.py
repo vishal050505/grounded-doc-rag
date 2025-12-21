@@ -145,7 +145,7 @@ with st.sidebar:
         <hr style="border: 0.5px solid rgba(255,255,255,0.12); margin: 10px 0;">
 
         <h4 style="color: #FFFFFF; margin-bottom: 6px;">
-            Instructions
+           ℹ️ Instructions
         </h4>
 
         <div style="
@@ -284,5 +284,6 @@ if uploaded_file:
 
 else:
     st.info("Upload a PDF to begin document analysis.")
+
 
 
