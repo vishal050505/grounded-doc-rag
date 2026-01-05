@@ -63,4 +63,7 @@ A RAG-based document intelligence system that answers questions strictly from up
 
 ▶️ Run Locally
 pip install -r requirements.txt
+
 streamlit run app.py
+
+run main.py for using it in terminal 
